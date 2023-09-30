@@ -1,10 +1,11 @@
 from flask import Flask, jsonify, request
 from git import Repo
 from flask_cors import CORS
+import difflib
 
 app = Flask(__name__)
 CORS(app)
-repo = Repo('D:/git/vm_test')
+repo = Repo('D:/git/education-researches-coordination-platform')
 
 
 @app.route('/api/get-diff/<int:offset>/<int:count>', methods=['GET'])
@@ -49,7 +50,7 @@ def get_diff(offset, count):
 
 @app.route('/api/get-commits', methods=['GET'])
 def get_commits():
-    commits = list(repo.iter_commits(all=True, max_count=10))
+    commits = list(repo.iter_commits(all=True, max_count=50))
     commits_data = [{
         'message': commit.message,
         'hex': commit.hexsha
@@ -74,8 +75,23 @@ def get_diff_between(base_sha, compare_sha):
     diff_list = []
 
     for i in range(offset, end):
-        old_content = base_commit.tree[diffs[i].a_path].data_stream.read().decode()
-        new_content = compare_commit.tree[diffs[i].a_path].data_stream.read().decode()
+        file_path = diffs[i].a_path or diffs[i].b_path
+        diff_item = diffs[i].diff.decode('utf-8')  # Add decode here
+
+        if diffs[i].a_path:
+            old_content = base_commit.tree[diffs[i].a_path].data_stream.read().decode()
+        else:
+            old_content = ""
+        if diffs[i].b_path:
+            new_content = compare_commit.tree[diffs[i].b_path].data_stream.read().decode()
+        else:
+            new_content = ""
+
+        if old_content == '' and new_content == '':
+            continue
+
+        added_lines = sum(1 for line in diff_item.split('\n') if line.startswith('+') and not line.startswith('+++'))
+        deleted_lines = sum(1 for line in diff_item.split('\n') if line.startswith('-') and not line.startswith('---'))
 
         diff_data = {
             'name': base_commit.message,
@@ -83,11 +99,14 @@ def get_diff_between(base_sha, compare_sha):
             'newFileContent': new_content,
             'hex': base_commit.hexsha,
             'author': base_commit.author.name,
-            'file': diffs[i].a_path
+            'file': file_path,
+            'addedLines': added_lines,
+            'deletedLines': deleted_lines,
         }
         diff_list.append(diff_data)
 
     return jsonify(diff_list)
+
 
 
 
