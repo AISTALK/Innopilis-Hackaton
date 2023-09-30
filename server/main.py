@@ -1,22 +1,36 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from git import Repo
 from flask_cors import CORS
+
 app = Flask(__name__)
 CORS(app)
+repo = Repo('D:/git/vm_test')
 
 
-@app.route('/api/get-diff/<int:index>', methods=['GET'])
-def get_diff(index):
-    repo = Repo('D:/git/vm_test')
+@app.route('/api/get-diff/<int:offset>/<int:count>', methods=['GET'])
+def get_diff(offset, count):
     head = repo.head.commit
     commits = list(repo.iter_commits(all=True))
     commit = commits[1]
     diffs = head.diff(commit, create_patch=True, ignore_blank_lines=True, ignore_space_at_eol=True, diff_filter='cr')
     diff_list = []
-    for i in range(0, index):
-        if diffs[i].a_path in commit.tree and diffs[i].a_path in head.tree:
+
+    print(f"Total diffs available: {len(diffs)}")
+
+    end = min(offset + count, len(diffs))
+
+    for i in range(offset, end):
+        old_content = ''
+        new_content = ''
+
+        if diffs[i].a_path in commit.tree:
             old_content = commit.tree[diffs[i].a_path].data_stream.read().decode()
+
+        if diffs[i].a_path in head.tree:
             new_content = head.tree[diffs[i].a_path].data_stream.read().decode()
+
+        # Only append if either old_content or new_content has some data
+        if old_content or new_content:
             diff_data = {
                 'name': head.message,
                 'oldFileContent': old_content,
@@ -26,8 +40,54 @@ def get_diff(index):
                 'file': diffs[i].a_path
             }
             diff_list.append(diff_data)
+        else:
+            print(f"Excluded diff path: {diffs[i].a_path}")
+
+    print(f"Returned diffs: {len(diff_list)}")
     return jsonify(diff_list)
 
+
+@app.route('/api/get-commits', methods=['GET'])
+def get_commits():
+    commits = list(repo.iter_commits(all=True, max_count=10))
+    commits_data = [{
+        'message': commit.message,
+        'hex': commit.hexsha
+    } for commit in commits]
+
+    return jsonify(commits_data)
+
+
+@app.route('/api/get-diff-between/<string:base_sha>/<string:compare_sha>', methods=['GET'])
+def get_diff_between(base_sha, compare_sha):
+    offset = int(request.args.get('offset', 0))
+    count = int(request.args.get('count', 10))
+
+    if not base_sha or not compare_sha:
+        return jsonify({"error": "Invalid commit SHAs provided."}), 400
+
+    base_commit = repo.commit(base_sha)
+    compare_commit = repo.commit(compare_sha)
+    diffs = base_commit.diff(compare_commit, create_patch=True)
+
+    end = min(offset + count, len(diffs))
+    diff_list = []
+
+    for i in range(offset, end):
+        old_content = base_commit.tree[diffs[i].a_path].data_stream.read().decode()
+        new_content = compare_commit.tree[diffs[i].a_path].data_stream.read().decode()
+
+        diff_data = {
+            'name': base_commit.message,
+            'oldFileContent': old_content,
+            'newFileContent': new_content,
+            'hex': base_commit.hexsha,
+            'author': base_commit.author.name,
+            'file': diffs[i].a_path
+        }
+        diff_list.append(diff_data)
+
+    return jsonify(diff_list)
 
 
 
