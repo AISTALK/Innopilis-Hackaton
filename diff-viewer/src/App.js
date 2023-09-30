@@ -4,14 +4,56 @@ import './App.css';
 
 function App() {
   const [diffs, setDiffs] = useState([]);
+  const [loadedDiffs, setLoadedDiffs] = useState(0);
+  const [hasMoreDiffs, setHasMoreDiffs] = useState(true);
   const [showAllLines, setShowAllLines] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
+  const [fetchedDiffsSet, setFetchedDiffsSet] = useState(new Set());
+
+  const fetchDiffs = (offset, count) => {
+    setIsFetching(true);
+    fetch(`http://localhost:5000/api/get-diff/${offset}/${count}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.length > 0) {
+          const uniqueDiffs = data.filter(newData => {
+            const uniqueId = `${newData.hex}-${newData.file}`;
+            if (fetchedDiffsSet.has(uniqueId)) {
+              return false;
+            } else {
+              fetchedDiffsSet.add(uniqueId);
+              return true;
+            }
+          });
+
+          setFetchedDiffsSet(prev => new Set([...prev, ...uniqueDiffs.map(diff => `${diff.hex}-${diff.file}`)]));
+          setDiffs(prevDiffs => [...prevDiffs, ...uniqueDiffs]);
+          setLoadedDiffs(prev => prev + uniqueDiffs.length);
+        } else {
+          setHasMoreDiffs(false);
+        }
+        setIsFetching(false);
+      })
+      .catch(error => {
+        console.error("Error fetching diffs:", error);
+        setIsFetching(false);
+      });
+  }
+
+  const handleScroll = () => {
+    if (!isFetching && hasMoreDiffs && (window.innerHeight + document.documentElement.scrollTop > document.documentElement.offsetHeight - 200)) {
+      fetchDiffs(loadedDiffs, 3);
+    }
+  }
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/get-diff/4')
-      .then(response => response.json())
-      .then(data => setDiffs(data))
-      .catch(error => console.error("Error fetching diffs:", error));
+    fetchDiffs(0, 3);  // Initial fetch
   }, []);
+
+  useEffect(() => {
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [loadedDiffs, isFetching, hasMoreDiffs]);
 
   console.log("Current value of showAllLines:", showAllLines);
 
