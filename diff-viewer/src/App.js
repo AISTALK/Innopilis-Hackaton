@@ -1,90 +1,88 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ReactDiffViewer from 'react-diff-viewer';
 import './App.css';
 
 function App() {
-  const [diffs, setDiffs] = useState([]);
-  const [loadedDiffs, setLoadedDiffs] = useState(0);
-  const [hasMoreDiffs, setHasMoreDiffs] = useState(true);
-  const [showAllLines, setShowAllLines] = useState(false);
-  const [isFetching, setIsFetching] = useState(false);
-  const [fetchedDiffsSet, setFetchedDiffsSet] = useState(new Set());
+    const [diffs, setDiffs] = useState([]);
+    const [showAllLines, setShowAllLines] = useState(false);
+    const [commits, setCommits] = useState([]);
+    const [baseCommit, setBaseCommit] = useState('');
+    const [compareCommit, setCompareCommit] = useState('');
+    const [offset, setOffset] = useState(0);
+    const count = 10;
 
-  const fetchDiffs = (offset, count) => {
-    setIsFetching(true);
-    fetch(`http://localhost:5000/api/get-diff/${offset}/${count}`)
-      .then(response => response.json())
-      .then(data => {
-        if (data.length > 0) {
-          const uniqueDiffs = data.filter(newData => {
-            const uniqueId = `${newData.hex}-${newData.file}`;
-            if (fetchedDiffsSet.has(uniqueId)) {
-              return false;
-            } else {
-              fetchedDiffsSet.add(uniqueId);
-              return true;
-            }
-          });
+    useEffect(() => {
+        fetch('http://localhost:5000/api/get-commits')
+            .then(response => response.json())
+            .then(data => setCommits(data))
+            .catch(error => console.error("Error fetching commits:", error));
+    }, []);
 
-          setFetchedDiffsSet(prev => new Set([...prev, ...uniqueDiffs.map(diff => `${diff.hex}-${diff.file}`)]));
-          setDiffs(prevDiffs => [...prevDiffs, ...uniqueDiffs]);
-          setLoadedDiffs(prev => prev + uniqueDiffs.length);
-        } else {
-          setHasMoreDiffs(false);
+    const handleScroll = () => {
+        console.log("Scrolling...");
+
+        // Check if we've scrolled to near the bottom of the container
+        if (window.innerHeight + document.documentElement.scrollTop < document.documentElement.offsetHeight - 10) return;
+
+        console.log('Near the bottom! Fetching more diffs...');
+        setOffset(prevOffset => prevOffset + count);
+    };
+
+    useEffect(() => {
+        if(baseCommit && compareCommit) {
+            fetch(`http://localhost:5000/api/get-diff-between/${baseCommit}/${compareCommit}?offset=${offset}&count=${count}`)
+                .then(response => response.json())
+                .then(data => {
+                    setDiffs(prevDiffs => [...prevDiffs, ...data]);
+                })
+                .catch(error => console.error("Error fetching diffs between commits:", error));
         }
-        setIsFetching(false);
-      })
-      .catch(error => {
-        console.error("Error fetching diffs:", error);
-        setIsFetching(false);
-      });
-  }
+    }, [baseCommit, compareCommit, offset]);
 
-  const handleScroll = () => {
-    if (!isFetching && hasMoreDiffs && (window.innerHeight + document.documentElement.scrollTop > document.documentElement.offsetHeight - 200)) {
-      fetchDiffs(loadedDiffs, 3);
-    }
-  }
+    useEffect(() => {
+        window.addEventListener('scroll', handleScroll);
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+        };
+    }, [handleScroll]);
 
-  useEffect(() => {
-    fetchDiffs(0, 3);  // Initial fetch
-  }, []);
+    return (
+        <div className="App">
+            <div>
+                <select value={baseCommit} onChange={e => setBaseCommit(e.target.value)}>
+                    <option value="">Choose base commit</option>
+                    {commits.map(commit => <option key={commit.hex} value={commit.hex}>{commit.message}</option>)}
+                </select>
+                <select value={compareCommit} onChange={e => setCompareCommit(e.target.value)}>
+                    <option value="">Choose comparison commit</option>
+                    {commits.map(commit => <option key={commit.hex} value={commit.hex}>{commit.message}</option>)}
+                </select>
+            </div>
+            <button onClick={() => setShowAllLines(prev => !prev)}>
+                {showAllLines ? 'Hide Unchanged Lines' : 'Show All Lines'}
+            </button>
+            {diffs.map((diff, index) => {
+                const oldString = diff.oldFileContent || "";
+                const newString = diff.newFileContent || "";
 
-  useEffect(() => {
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [loadedDiffs, isFetching, hasMoreDiffs]);
-
-  console.log("Current value of showAllLines:", showAllLines);
-
-  return (
-    <div key={showAllLines ? "show" : "hide"} className="App">
-      <button onClick={() => setShowAllLines(prev => !prev)}>
-        {showAllLines ? 'Hide Unchanged Lines' : 'Show All Lines'}
-      </button>
-
-      {diffs.map((diff, index) => {
-        const oldString = diff.oldFileContent || "";
-        const newString = diff.newFileContent || "";
-
-        return (
-          <div key={index} style={{ marginBottom: '20px' }}>
-            <h2>{diff.file}</h2>
-            <ReactDiffViewer
-              oldValue={oldString}
-              newValue={newString}
-              splitView={true}
-              disableWordDiff={true}
-              useDarkTheme={false}
-              showDiffOnly={!showAllLines}
-              hideUnchanged={!showAllLines}
-              surroundingLines={showAllLines ? undefined : 3}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
+                return (
+                    <div key={index} style={{ marginBottom: '20px' }}>
+                        <h2>{diff.file}</h2>
+                        <ReactDiffViewer
+                            oldValue={oldString}
+                            newValue={newString}
+                            splitView={true}
+                            disableWordDiff={true}
+                            useDarkTheme={false}
+                            showDiffOnly={!showAllLines}
+                            hideUnchanged={!showAllLines}
+                            surroundingLines={showAllLines ? undefined : 3}
+                        />
+                    </div>
+                );
+            })}
+        </div>
+    );
 }
 
 export default App;
