@@ -5,7 +5,7 @@ import difflib
 
 app = Flask(__name__)
 CORS(app)
-repo = Repo('D:/git/education-researches-coordination-platform')
+repo = Repo('D:/git/read-it-later')
 
 
 @app.route('/api/get-diff/<int:offset>/<int:count>', methods=['GET'])
@@ -48,13 +48,31 @@ def get_diff(offset, count):
     return jsonify(diff_list)
 
 
+@app.route('/api/set-repo', methods=['POST'])
+def set_repo_path():
+    global repo
+    repo_path = request.json.get('path', '')
+    try:
+        repo = Repo(repo_path)
+        return jsonify({"message": "Repository path set successfully."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
 @app.route('/api/get-commits', methods=['GET'])
 def get_commits():
-    commits = list(repo.iter_commits(all=True, max_count=50))
-    commits_data = [{
-        'message': commit.message,
-        'hex': commit.hexsha
-    } for commit in commits]
+    global repo
+    if repo is None:
+        return jsonify({"error": "Repository not set or invalid."}), 400
+    try:
+        commits = list(repo.iter_commits(all=True, max_count=50))
+
+        commits_data = [{
+            'message': commit.message,
+            'hex': commit.hexsha
+        } for commit in commits]
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
     return jsonify(commits_data)
 

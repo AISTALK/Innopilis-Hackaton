@@ -26,7 +26,7 @@ Node.js and npm (for the React frontend)
 ```cd diff-viewer```
 
 ```npm i```
-Если возникает ошибка с react-diff-viewer, то выполните команду ``````
+Если возникает ошибка с react-diff-viewer, то выполните команду ```npm install react-diff-viewer —save —legacy-peer-deps```
 
 ```npm start```
 

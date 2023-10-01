@@ -10,6 +10,7 @@ function App() {
     const [baseCommit, setBaseCommit] = useState('');
     const [compareCommit, setCompareCommit] = useState('');
     const [offset, setOffset] = useState(0);
+    const [repoPath, setRepoPath] = useState('');
     const count = 10;
 
     useEffect(() => {
@@ -27,6 +28,26 @@ function App() {
         console.log('Near the bottom! Fetching more diffs...');
         setOffset(prevOffset => prevOffset + count);
     }, []);
+
+    const handleRepoPathChange = () => {
+        fetch('http://localhost:5000/api/set-repo', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ path: repoPath }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                console.log(data.message);
+                window.location.reload();
+            } else {
+                console.error(data.error);
+            }
+        })
+        .catch(error => console.error("Error setting repo path:", error));
+    };
 
     useEffect(() => {
         if(baseCommit && compareCommit) {
@@ -81,6 +102,15 @@ function App() {
                 <button onClick={() => setSplitView(prev => !prev)}>
                     {splitView ? 'Unified View' : 'Split View'}
                 </button>
+            </div>
+            <div>
+                <input
+                    type="text"
+                    placeholder="Enter absolute path to your repo"
+                    value={repoPath}
+                    onChange={e => setRepoPath(e.target.value)}
+                />
+                <button onClick={handleRepoPathChange}>Set Repo Path</button>
             </div>
             {diffs.map((diff, index) => {
                 const oldString = diff.oldFileContent || "";
